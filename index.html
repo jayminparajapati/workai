@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GymBot 3000 | Your AI Personal Trainer</title>
+    <style>
+        /* --- CSS STYLES --- */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #0d1117; /* Dark background */
+            color: #c9d1d9; /* Light text */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 700px;
+            background-color: #161b22; /* Slightly lighter dark for container */
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            padding: 30px;
+        }
+
+        h1 {
+            color: #58a6ff; /* Blue accent color */
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+
+        .chat-window {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            background-color: #0d1117;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .message {
+            max-width: 85%;
+            padding: 10px 15px;
+            border-radius: 18px;
+            line-height: 1.5;
+            word-wrap: break-word;
+            white-space: pre-wrap; /* Preserve formatting like newlines and spacing */
+        }
+
+        .user-message {
+            align-self: flex-end;
+            background-color: #238636; /* User message color */
+            color: #ffffff;
+            border-bottom-right-radius: 2px;
+        }
+
+        .bot-message {
+            align-self: flex-start;
+            background-color: #30363d; /* Bot message color */
+            color: #c9d1d9;
+            border-bottom-left-radius: 2px;
+        }
+
+        .input-area {
+            display: flex;
+            gap: 10px;
+        }
+
+        #user-input {
+            flex-grow: 1;
+            padding: 15px;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            background-color: #21262d;
+            color: #c9d1d9;
+            resize: none;
+            font-size: 1em;
+        }
+
+        #send-btn {
+            padding: 15px 20px;
+            background-color: #58a6ff;
+            color: #0d1117;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+
+        #send-btn:hover:not(:disabled) {
+            background-color: #79c0ff;
+        }
+
+        #send-btn:disabled {
+            background-color: #30363d;
+            cursor: not-allowed;
+        }
+
+        .typing-indicator {
+            align-self: flex-start;
+            color: #58a6ff;
+            font-style: italic;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+
+        .typing-indicator.visible {
+            opacity: 1;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+            .chat-window {
+                height: 350px;
+            }
+            .input-area {
+                flex-direction: column;
+            }
+            #send-btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>💪 GymBot 3000</h1>
+        <div class="chat-window" id="chat-window">
+            <div class="message bot-message">
+                Hello! I'm your AI Personal Trainer, powered by Gemini. Tell me your fitness goals or ask for a workout plan!
+                <br><br>
+                **Try asking:**
+                * "Give me a 3-day full-body routine."
+                * "What's the correct form for a deadlift?"
+                * "Should I eat carbs before or after a workout?"
+            </div>
+            <div class="typing-indicator" id="typing-indicator">GymBot is typing...</div>
+        </div>
+        <div class="input-area">
+            <textarea id="user-input" placeholder="Ask your trainer..." rows="3"></textarea>
+            <button id="send-btn">Send</button>
+        </div>
+    </div>
+
+    <script>
+        // --- JAVASCRIPT LOGIC ---
+
+        // !!! IMPORTANT: REPLACE THIS WITH YOUR ACTUAL GEMINI API KEY !!!
+        const GEMINI_API_KEY = "YOUR_GEMINI_API_KEY";
+
+        // DOM Elements
+        const chatWindow = document.getElementById('chat-window');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const typingIndicator = document.getElementById('typing-indicator');
+
+        // Configuration
+        const MODEL_NAME = "gemini-2.5-flash"; 
+
+        // System Instruction to define the bot's persona
+        const SYSTEM_INSTRUCTION_TEXT = `You are GymBot 3000, an expert, highly motivating, and knowledgeable personal trainer. Your responses must be encouraging, clear, and focused on fitness, nutrition, and correct exercise form.
+- Always provide actionable advice.
+- Format workout routines using **bold text** for exercise names and bullet points.
+- Keep the tone professional, friendly, and motivational.
+- Do not answer questions outside of fitness, health, or nutrition. If asked a non-fitness question, politely redirect them back to their training.`;
+
+        /**
+         * Adds a message to the chat window.
+         * @param {string} text - The message content.
+         * @param {string} sender - 'user' or 'bot'.
+         */
+        function addMessage(text, sender) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message', `${sender}-message`);
+            // Use innerHTML to process Markdown/bolding and replace newlines with <br>
+            messageDiv.innerHTML = text.replace(/\n/g, '<br>'); 
+            chatWindow.appendChild(messageDiv);
+            chatWindow.scrollTop = chatWindow.scrollHeight; // Auto-scroll to bottom
+        }
+
+        /**
+         * Shows or hides the 'bot is typing...' indicator.
+         * @param {boolean} isVisible
+         */
+        function showTypingIndicator(isVisible) {
+            if (isVisible) {
+                typingIndicator.classList.add('visible');
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+            } else {
+                typingIndicator.classList.remove('visible');
+            }
+        }
+
+        /**
+         * Sends the user's message to the Gemini API and processes the response.
+         */
+        async function sendMessage() {
+            const userText = userInput.value.trim();
+            if (!userText) return;
+
+            if (GEMINI_API_KEY === "YOUR_GEMINI_API_KEY") {
+                alert("ERROR: Please replace 'YOUR_GEMINI_API_KEY' in the JavaScript code with your actual key.");
+                return;
+            }
+
+            // 1. Display user message
+            addMessage(userText, 'user');
+            userInput.value = ''; // Clear input
+            sendBtn.disabled = true;
+            showTypingIndicator(true);
+
+            // 2. Construct the CORRECT API request payload
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${GEMINI_API_KEY}`;
+            
+            // 🔥 CRITICAL FIX: STRUCTURE systemInstruction as a Content object with 'parts'
+            const payload = {
+                // System Instruction must be a Content object (with a 'parts' array)
+                systemInstruction: {
+                    parts: [
+                        { text: SYSTEM_INSTRUCTION_TEXT }
+                    ]
+                },
+
+                // Configuration parameters like temperature go under generationConfig
+                generationConfig: {
+                    temperature: 0.7 
+                },
+                
+                // User's message content
+                contents: [
+                    {
+                        parts: [
+                            { text: userText }
+                        ]
+                    }
+                ]
+            };
+
+            // 3. Send the request
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    // Include the error message in the console and user output
+                    throw new Error(`API Error: ${response.status} - ${errorData.error.message || 'Unknown error'}`);
+                }
+
+                const data = await response.json();
+                
+                // Extract the model's text response
+                let botResponse = "Sorry, the gym-iverse seems closed right now. I couldn't get a valid response.";
+                
+                if (data.candidates && data.candidates.length > 0 && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts.length > 0) {
+                    botResponse = data.candidates[0].content.parts[0].text;
+                } else if (data.promptFeedback && data.promptFeedback.blockReason) {
+                    // Handle cases where the prompt was blocked by safety filters
+                     botResponse = `**Safety Filter Activated:** I cannot respond to that query. Reason: ${data.promptFeedback.blockReason}. Please keep your questions focused on fitness and training.`;
+                }
+
+                // 4. Display bot message
+                addMessage(botResponse, 'bot');
+
+            } catch (error) {
+                console.error('Fetch error:', error);
+                // Display user-friendly error message
+                addMessage(`**Connection/API Error:** Failed to connect or get a valid response. Details: ${error.message}. Please check your API key, console log, and network.`, 'bot');
+            } finally {
+                // 5. Cleanup
+                showTypingIndicator(false);
+                sendBtn.disabled = false;
+                userInput.focus();
+            }
+        }
+
+        // Event Listeners
+        sendBtn.addEventListener('click', sendMessage);
+
+        userInput.addEventListener('keydown', (event) => {
+            // Check for Enter key press (and not Shift+Enter for a new line)
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault(); // Prevents adding a newline
+                sendMessage();
+            }
+        });
+    </script>
+
+</body>
+</html>
